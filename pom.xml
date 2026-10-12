@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+		 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+	<modelVersion>4.0.0</modelVersion>
+
+	<!-- Spring Boot Parent -->
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>4.1.1</version>
+		<relativePath/>
+	</parent>
+
+	<!-- Project Information -->
+	<groupId>Aerosa.withsky</groupId>
+	<artifactId>AerosagaInfo</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>AeroSagaInfo</name>
+	<description>Temporal.io Autonomous Drone Mission Control</description>
+	<packaging>jar</packaging>
+
+	<!-- Java Configuration -->
+	<properties>
+		<java.version>25</java.version>
+		<maven.compiler.release>25</maven.compiler.release>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<temporal.version>1.13.0</temporal.version>
+	</properties>
+
+	<!-- Dependencies -->
+	<dependencies>
+
+		<!-- Spring Boot Web MVC -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-webmvc</artifactId>
+		</dependency>
+
+		<!-- Temporal Java SDK -->
+		<dependency>
+			<groupId>io.temporal</groupId>
+			<artifactId>temporal-sdk</artifactId>
+			<version>${temporal.version}</version>
+		</dependency>
+
+		<!-- Spring Boot Testing -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-webmvc-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+	</dependencies>
+
+	<!-- Build Configuration -->
+	<build>
+		<plugins>
+
+			<!-- Maven Compiler -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<configuration>
+					<release>25</release>
+				</configuration>
+			</plugin>
+
+			<!-- Spring Boot Maven Plugin -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+
+		</plugins>
+	</build>
+
+</project>
