@@ -1,8 +1,8 @@
-
 package Aerosaga.withsky.AerosagaProject.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,10 +31,12 @@ public class Mission {
     @OneToMany(
             mappedBy = "mission",
             cascade = CascadeType.ALL,
-            orphanRemoval = true)
+            orphanRemoval = true
+    )
     private List<WayPoint> waypoints = new ArrayList<>();
 
-    public Mission() {}
+    public Mission() {
+    }
 
     public void addWaypoint(WayPoint waypoint) {
         waypoints.add(waypoint);
@@ -78,4 +80,11 @@ public class Mission {
         return workflowId;
     }
 
+    public List<WayPoint> getWaypoints() {
+        return waypoints;
+    }
+
+    public void setWaypoints(List<WayPoint> waypoints) {
+        this.waypoints = waypoints;
+    }
 }

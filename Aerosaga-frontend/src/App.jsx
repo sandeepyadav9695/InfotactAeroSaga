@@ -1,385 +1,535 @@
-﻿
-import { useCallback, useEffect, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Activity,
-  Battery,
-  BatteryWarning,
-  CircleAlert,
-  Clock,
-  MapPin,
-  Plane,
-  RefreshCw,
-  RotateCcw,
-  ShieldCheck,
-  Square,
-  XCircle,
-} from 'lucide-react';
-import './App.css';
+  CircleMarker,
+  MapContainer,
+  Popup,
+  TileLayer,
+  useMap,
+} from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import "./index.css";
 
-const API = '/api';
+const API_URL = "http://localhost:8081/api/drones";
 
-async function apiRequest(path, options = {}) {
-  const response = await fetch(`${API}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
+const INDIA_CENTER = [22.9734, 78.6569];
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `Request failed (${response.status})`);
+function normalizeStatus(status) {
+  return String(status || "UNKNOWN").toUpperCase();
+}
+
+function batteryClass(value) {
+  const battery = Number(value ?? 0);
+  if (battery <= 20) return "critical";
+  if (battery <= 40) return "warning";
+  return "healthy";
+}
+
+function droneCoordinates(drone) {
+  const latitude = Number(drone.latitude);
+  const longitude = Number(drone.longitude);
+
+  if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      latitude < 6 ||
+      latitude > 37.5 ||
+      longitude < 67 ||
+      longitude > 98
+  ) {
+    return null;
   }
 
-  if (response.status === 204) return null;
-
-  const contentType = response.headers.get('content-type') || '';
-  return contentType.includes('application/json')
-      ? response.json()
-      : null;
+  return [latitude, longitude];
 }
 
-function batteryColor(level) {
-  if (level <= 10) return 'critical';
-  if (level <= 25) return 'warning';
-  return 'healthy';
+function FlyToDrone({ position }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (position) {
+      map.flyTo(position, 12, { duration: 1 });
+    }
+  }, [map, position]);
+
+  return null;
 }
 
-function statusClass(status = '') {
-  return status.toLowerCase().replaceAll('_', '-');
-}
-
-function StatCard({ title, value, icon: Icon, detail }) {
+function MetricCard({ label, value, detail, icon, accent }) {
   return (
-      <article className="stat-card">
-        <div className="stat-heading">
-          <span>{title}</span>
-          <Icon size={20} />
+      <article className={`metric-card ${accent || ""}`}>
+        <div className="metric-top">
+          <span>{label}</span>
+          <span className="metric-icon">{icon}</span>
         </div>
-        <div className="stat-value">{value ?? 0}</div>
-        <div className="stat-detail">{detail}</div>
+        <div className="metric-value">{value}</div>
+        <div className="metric-detail">{detail}</div>
       </article>
   );
 }
 
-function BatteryBar({ level = 0 }) {
-  const value = Math.max(0, Math.min(100, Number(level) || 0));
-  const color = batteryColor(value);
-
-  return (
-      <div className="battery-row">
-        <Battery size={17} />
-        <div className="battery-track">
-          <div
-              className={`battery-fill ${color}`}
-              style={{ width: `${value}%` }}
-          />
-        </div>
-        <strong>{value.toFixed(1)}%</strong>
-      </div>
-  );
-}
-
-export default function App() {
-  const [dashboard, setDashboard] = useState(null);
+function App() {
   const [drones, setDrones] = useState([]);
-  const [missions, setMissions] = useState([]);
-  const [selectedDrone, setSelectedDrone] = useState('');
-  const [missionName, setMissionName] = useState('Delivery Mission');
-  const [latitude, setLatitude] = useState('19.0760');
-  const [longitude, setLongitude] = useState('72.8777');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [selectedDrone, setSelectedDrone] = useState(null);
+  const [search, setSearch] = useState("");
 
-  const refresh = useCallback(async () => {
+  const fetchDrones = useCallback(async () => {
     try {
-      const results = await Promise.all([
-        apiRequest('/dashboard'),
-        apiRequest('/drones'),
-        apiRequest('/missions'),
-      ]);
+      const response = await fetch(API_URL);
 
-      setDashboard(results[0]);
-      setDrones(Array.isArray(results[1]) ? results[1] : []);
-      setMissions(Array.isArray(results[2]) ? results[2] : []);
-      setError('');
+      if (!response.ok) {
+        throw new Error(`Backend returned HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (!Array.isArray(data)) {
+        throw new Error("Expected an array of drones from the API.");
+      }
+
+      setDrones(data);
+      setError("");
       setLastUpdated(new Date());
-    } catch (e) {
+    } catch (err) {
       setError(
-          `Could not load backend data. Check Spring Boot on port 8081. ${e.message}`
+          `${err.message}. Check that Spring Boot is running on port 8081.`
       );
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    refresh();
-    const timer = window.setInterval(refresh, 5000);
+    fetchDrones();
+
+    const timer = window.setInterval(fetchDrones, 5000);
     return () => window.clearInterval(timer);
-  }, [refresh]);
+  }, [fetchDrones]);
 
-  async function runAction(action, missionId, body) {
-    setBusy(true);
-    setError('');
-    setMessage('');
+  const stats = useMemo(() => {
+    const active = drones.filter((drone) =>
+        ["ACTIVE", "IN_PROGRESS", "IN_FLIGHT", "EXECUTING"].includes(
+            normalizeStatus(drone.status)
+        )
+    ).length;
 
-    try {
-      await apiRequest(`/missions/${missionId}/${action}`, {
-        method: 'POST',
-        body: body ? JSON.stringify(body) : undefined,
-      });
-      setMessage(`${action.replace('-', ' ')} request submitted.`);
-      await refresh();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
+    const idle = drones.filter((drone) =>
+        ["IDLE", "AVAILABLE", "READY"].includes(
+            normalizeStatus(drone.status)
+        )
+    ).length;
+
+    const lowBattery = drones.filter(
+        (drone) => Number(drone.batteryLevel ?? 0) <= 20
+    ).length;
+
+    return {
+      total: drones.length,
+      active,
+      idle,
+      lowBattery,
+    };
+  }, [drones]);
+
+  const filteredDrones = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return drones.filter((drone) =>
+        String(drone.name || drone.id || "")
+            .toLowerCase()
+            .includes(query)
+    );
+  }, [drones, search]);
+
+  const mappedDrones = useMemo(
+      () =>
+          filteredDrones
+              .map((drone) => ({
+                drone,
+                position: droneCoordinates(drone),
+              }))
+              .filter((item) => item.position),
+      [filteredDrones]
+  );
+
+  const selectedPosition = selectedDrone
+      ? droneCoordinates(selectedDrone)
+      : null;
+
+  function selectDrone(drone) {
+    setSelectedDrone(drone);
   }
-
-  async function createMission(event) {
-    event.preventDefault();
-    setBusy(true);
-    setError('');
-    setMessage('');
-
-    try {
-      const created = await apiRequest('/missions', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: missionName,
-          droneId: Number(selectedDrone),
-          waypoints: [
-            {
-              latitude: Number(latitude),
-              longitude: Number(longitude),
-              altitude: 30,
-            },
-          ],
-        }),
-      });
-
-      setMessage(`Mission ${created?.id ?? ''} created successfully.`);
-      await refresh();
-    } catch (e) {
-      setError(
-          `${e.message}. Confirm the request fields match your CreateMissionRequest DTO.`
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const stats = dashboard || {};
-  const droneRows = stats.drones || drones;
-  const missionRows = stats.missions || missions;
-  const alerts = stats.alerts || [];
 
   return (
-      <main className="app-shell">
-        <header className="topbar">
-          <div className="brand">
-            <div className="brand-icon"><Plane size={25} /></div>
-            <div>
-              <h1>AeroSaga</h1>
-              <p>Autonomous Drone Mission Control</p>
-            </div>
-          </div>
-          <div className="topbar-right">
-            <span className="live-dot" />
-            <span>Monitoring</span>
-            <button className="icon-button" onClick={refresh} title="Refresh">
-              <RefreshCw size={17} />
-            </button>
-          </div>
-        </header>
+      <div className="dashboard">
+        <aside className="sidebar">
+          <a className="brand" href="#overview" aria-label="AeroSaga home">
+            <span className="brand-symbol">A</span>
+            <span>
+            <strong>AEROSAGA</strong>
+            <small>MISSION CONTROL</small>
+          </span>
+          </a>
 
-        <section className="welcome">
-          <div>
-            <p className="eyebrow">FLEET OVERVIEW</p>
-            <h2>Mission Control Center</h2>
-            <p className="muted">
-              Monitor drone health, mission execution, and battery status.
-            </p>
-          </div>
-          <div className="updated">
-            <Clock size={15} />
-            {lastUpdated
-                ? `Updated ${lastUpdated.toLocaleTimeString()}`
-                : 'Waiting for data'}
-          </div>
-        </section>
+          <div className="nav-heading">OPERATIONS</div>
 
-        {error && <div className="notice error"><CircleAlert size={18} />{error}</div>}
-        {message && <div className="notice success"><ShieldCheck size={18} />{message}</div>}
+          <nav className="navigation" aria-label="Main navigation">
+            <a className="nav-item active" href="#overview">
+              <span>◈</span> Overview
+            </a>
+            <a className="nav-item" href="#fleet">
+              <span>⌁</span> Drone Fleet
+            </a>
+            <a className="nav-item" href="#map-panel">
+              <span>◎</span> Live Map
+            </a>
+            <a className="nav-item" href="#alerts">
+              <span>△</span> System Alerts
+            </a>
+          </nav>
 
-        <section className="stats-grid">
-          <StatCard title="Total Drones" value={stats.totalDrones ?? drones.length}
-                    icon={Plane} detail="Registered fleet" />
-          <StatCard title="Idle Drones" value={stats.idleDrones}
-                    icon={ShieldCheck} detail="Available for missions" />
-          <StatCard title="Active Missions" value={stats.activeMission ?? stats.activeMissions}
-                    icon={Activity} detail="Currently in progress" />
-          <StatCard title="Low Battery" value={stats.lowBatteryDrone ?? stats.lowBatteryDrones}
-                    icon={BatteryWarning} detail="At or below return threshold" />
-        </section>
-
-        <section className="content-grid">
-          <article className="panel">
-            <div className="panel-header">
+          <div className="sidebar-bottom">
+            <div className="connection-card">
+              <span className={`connection-dot ${error ? "offline" : ""}`} />
               <div>
-                <h3>Drone Fleet</h3>
-                <p>Current status and battery levels</p>
+                <strong>{error ? "Backend Offline" : "System Monitor"}</strong>
+                <small>{error ? "Check connection" : "Monitoring enabled"}</small>
               </div>
-              <span className="count-pill">{droneRows.length} drones</span>
             </div>
 
-            {droneRows.length === 0 ? (
-                <div className="empty-state">No drones found. Register a drone through the API.</div>
-            ) : (
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                    <tr><th>Drone</th><th>Status</th><th>Battery</th><th>GPS</th></tr>
-                    </thead>
-                    <tbody>
-                    {droneRows.map((d) => {
-                      const id = d.id;
-                      const name = d.name ?? d.droneName ?? `Drone ${id}`;
-                      const level = d.batteryPercent ?? d.batteryLevel ?? 0;
+            <div className="sidebar-version">
+              AEROSAGA CONTROL SYSTEM
+              <br />
+              Development Environment
+            </div>
+          </div>
+        </aside>
 
-                      return (
-                          <tr key={id}>
-                            <td>
-                              <div className="drone-name">
-                                <span className="drone-avatar"><Plane size={16} /></span>
-                                <div><strong>{name}</strong><small>ID: {id}</small></div>
-                              </div>
-                            </td>
-                            <td><span className={`status-pill ${statusClass(d.status)}`}>{d.status ?? 'UNKNOWN'}</span></td>
-                            <td className="battery-cell"><BatteryBar level={level} /></td>
-                            <td>{d.gpsStatus ?? 'UNKNOWN'}</td>
-                          </tr>
-                      );
-                    })}
-                    </tbody>
-                  </table>
-                </div>
-            )}
-          </article>
-
-          <article className="panel alerts-panel">
-            <div className="panel-header">
-              <div><h3>Battery Alerts</h3><p>Threshold monitoring</p></div>
-              <BatteryWarning size={20} />
+        <main className="main-content" id="overview">
+          <header className="topbar">
+            <div>
+              <div className="eyebrow">FLEET OPERATIONS / OVERVIEW</div>
+              <h1>Mission Control</h1>
+              <p className="page-subtitle">
+                Monitor your autonomous fleet and mission activity.
+              </p>
             </div>
 
-            {alerts.length === 0 ? (
-                <div className="empty-state">
-                  <ShieldCheck size={28} />
-                  <strong>No active battery alerts</strong>
-                  <span>Alerts appear at or below the configured threshold.</span>
-                </div>
-            ) : alerts.map((a, i) => (
-                <div className={`alert-item ${String(a.severity).toLowerCase()}`} key={`${a.droneId}-${i}`}>
-                  <CircleAlert size={18} />
-                  <div>
-                    <strong>{a.droneName} Â· {a.batteryPercent}%</strong>
-                    <p>{a.message}</p>
-                  </div>
-                </div>
-            ))}
-
-            <div className="threshold-legend">
-              <span><i className="legend-dot warning-dot" /> Warning â‰¤ 25%</span>
-              <span><i className="legend-dot critical-dot" /> Critical â‰¤ 10%</span>
-            </div>
-          </article>
-        </section>
-
-        <section className="content-grid lower-grid">
-          <article className="panel">
-            <div className="panel-header">
-              <div><h3>Mission Operations</h3><p>Create a simulated delivery mission</p></div>
-            </div>
-            <form className="mission-form" onSubmit={createMission}>
-              <label>
-                Mission name
-                <input value={missionName} onChange={e => setMissionName(e.target.value)} required />
-              </label>
-              <label>
-                Available drone
-                <select value={selectedDrone} onChange={e => setSelectedDrone(e.target.value)} required>
-                  <option value="">Select a drone</option>
-                  {drones.filter(d => (d.status ?? 'IDLE') === 'IDLE')
-                      .map(d => (
-                          <option key={d.id} value={d.id}>
-                            {d.name ?? d.droneName ?? `Drone ${d.id}`} â€” {d.batteryLevel ?? 0}%
-                          </option>
-                      ))}
-                </select>
-              </label>
-              <div className="coordinate-grid">
-                <label>Latitude
-                  <input type="number" step="any" min="-90" max="90"
-                         value={latitude} onChange={e => setLatitude(e.target.value)} required />
-                </label>
-                <label>Longitude
-                  <input type="number" step="any" min="-180" max="180"
-                         value={longitude} onChange={e => setLongitude(e.target.value)} required />
-                </label>
+            <div className="topbar-actions">
+              <div className={`system-pill ${error ? "offline-pill" : ""}`}>
+                <span className="connection-dot" />
+                {error ? "DISCONNECTED" : "SYSTEM ONLINE"}
               </div>
-              <button className="primary-button" type="submit" disabled={busy || !selectedDrone}>
-                <Plane size={17} /> Create Mission
+
+              <button
+                  className="refresh-button"
+                  type="button"
+                  onClick={fetchDrones}
+              >
+                ↻ <span>Refresh</span>
               </button>
-            </form>
-          </article>
+            </div>
+          </header>
 
-          <article className="panel">
-            <div className="panel-header">
-              <div><h3>Mission Activity</h3><p>Start and manage Temporal workflows</p></div>
-              <span className="count-pill">{missionRows.length} missions</span>
+          {error && (
+              <div className="error-banner" role="alert">
+                <strong>API connection issue</strong>
+                <span>{error}</span>
+                <button type="button" onClick={fetchDrones}>
+                  Retry
+                </button>
+              </div>
+          )}
+
+          <section className="metrics-grid" aria-label="Fleet summary">
+            <MetricCard
+                label="Total Fleet"
+                value={loading ? "—" : stats.total}
+                detail="Registered drones"
+                icon="⌁"
+            />
+            <MetricCard
+                label="Active Drones"
+                value={loading ? "—" : stats.active}
+                detail="Currently on mission"
+                icon="↗"
+                accent="metric-cyan"
+            />
+            <MetricCard
+                label="Standby"
+                value={loading ? "—" : stats.idle}
+                detail="Available for dispatch"
+                icon="◷"
+                accent="metric-blue"
+            />
+            <MetricCard
+                label="Low Battery"
+                value={loading ? "—" : stats.lowBattery}
+                detail="Battery at or below 20%"
+                icon="ϟ"
+                accent="metric-red"
+            />
+          </section>
+
+          <section className="map-section" id="map-panel">
+            <div className="section-header">
+              <div>
+                <div className="eyebrow">GEOSPATIAL MONITORING</div>
+                <h2>Live Fleet Map</h2>
+                <p>Drone positions reported by the backend API.</p>
+              </div>
+
+              <span className="map-live-badge">
+              <span className="connection-dot" />
+              AUTO REFRESH · 5 SEC
+            </span>
             </div>
 
-            {missionRows.length === 0 ? (
-                <div className="empty-state">No missions created yet.</div>
-            ) : (
-                <div className="mission-list">
-                  {missionRows.map((m) => (
-                      <div className="mission-item" key={m.id}>
-                        <div className="mission-info">
-                          <span className="mission-icon"><MapPin size={17} /></span>
-                          <div>
-                            <strong>{m.name ?? m.missionName ?? `Mission ${m.id}`}</strong>
-                            <small>Mission #{m.id} Â· Drone {m.droneId ?? 'â€”'}</small>
-                            <span className={`status-pill ${statusClass(m.status)}`}>{m.status}</span>
-                          </div>
-                        </div>
-                        <div className="mission-actions">
-                          <button disabled={busy} title="Start workflow"
-                                  onClick={() => runAction('start', m.id, { timeScale: 60 })}>
-                            <Plane size={15} /> Start
-                          </button>
-                          <button disabled={busy} title="Request return home"
-                                  onClick={() => runAction('return-home', m.id)}>
-                            <RotateCcw size={15} />
-                          </button>
-                          <button disabled={busy} title="Request cancellation"
-                                  onClick={() => runAction('cancel', m.id)}>
-                            <XCircle size={15} />
-                          </button>
-                        </div>
-                      </div>
-                  ))}
-                </div>
-            )}
-          </article>
-        </section>
+            <div className="map-wrapper">
+              <MapContainer
+                  center={INDIA_CENTER}
+                  zoom={5}
+                  scrollWheelZoom
+                  className="fleet-map"
+              >
+                <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
 
-        <footer>
-          <span><Activity size={15} /> AeroSaga Mission Control</span>
-          <span>Simulation only Â· Not connected to physical drones</span>
-        </footer>
-      </main>
+                <FlyToDrone position={selectedPosition} />
+
+                {mappedDrones.map(({ drone, position }) => {
+                  const battery = Number(drone.batteryLevel ?? 0);
+                  const status = normalizeStatus(drone.status);
+                  const color =
+                      battery <= 20
+                          ? "#fb5364"
+                          : ["ACTIVE", "IN_PROGRESS", "IN_FLIGHT", "EXECUTING"].includes(
+                              status
+                          )
+                              ? "#2ce4c6"
+                              : "#63a5ff";
+
+                  return (
+                      <CircleMarker
+                          key={drone.id}
+                          center={position}
+                          radius={selectedDrone?.id === drone.id ? 10 : 7}
+                          pathOptions={{
+                            color,
+                            fillColor: color,
+                            fillOpacity: 0.9,
+                            weight: 2,
+                          }}
+                          eventHandlers={{
+                            click: () => selectDrone(drone),
+                          }}
+                      >
+                        <Popup>
+                          <strong>{drone.name || `Drone ${drone.id}`}</strong>
+                          <br />
+                          Status: {status}
+                          <br />
+                          Battery: {battery}%
+                          <br />
+                          GPS: {drone.gpsStatus || "Unknown"}
+                        </Popup>
+                      </CircleMarker>
+                  );
+                })}
+              </MapContainer>
+
+              <div className="map-legend">
+                <strong>MAP LEGEND</strong>
+                <span><i className="legend-dot green" /> Active</span>
+                <span><i className="legend-dot blue" /> Standby / Other</span>
+                <span><i className="legend-dot red" /> Low battery</span>
+              </div>
+
+              <div className="map-counter">
+                <span className="connection-dot" />
+                {mappedDrones.length} DRONES MAPPED
+              </div>
+            </div>
+
+            {mappedDrones.length === 0 && (
+                <p className="map-note">
+                  {loading
+                      ? "Loading drone locations…"
+                      : error
+                          ? "Drone locations will appear after the backend reconnects."
+                          : "No drones have valid coordinates in the configured India map bounds."}
+                </p>
+            )}
+          </section>
+
+          <section className="fleet-section" id="fleet">
+            <div className="section-header fleet-heading">
+              <div>
+                <div className="eyebrow">ASSET MANAGEMENT</div>
+                <h2>Drone Fleet</h2>
+                <p>Select a drone to highlight its location on the map.</p>
+              </div>
+
+              <label className="search-box">
+                <span aria-hidden="true">⌕</span>
+                <input
+                    type="search"
+                    placeholder="Search drones..."
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    aria-label="Search drones"
+                />
+              </label>
+            </div>
+
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                <tr>
+                  <th>DRONE</th>
+                  <th>STATUS</th>
+                  <th>BATTERY</th>
+                  <th>GPS</th>
+                  <th>LOCATION</th>
+                  <th>ACTION</th>
+                </tr>
+                </thead>
+
+                <tbody>
+                {filteredDrones.map((drone) => {
+                  const battery = Number(drone.batteryLevel ?? 0);
+                  const position = droneCoordinates(drone);
+                  const status = normalizeStatus(drone.status);
+
+                  return (
+                      <tr key={drone.id}>
+                        <td>
+                          <div className="drone-name">
+                            <span className="drone-avatar">✦</span>
+                            <span>
+                            <strong>{drone.name || `Drone ${drone.id}`}</strong>
+                            <small>ID: {drone.id}</small>
+                          </span>
+                          </div>
+                        </td>
+
+                        <td>
+                        <span
+                            className={`status-badge ${
+                                ["ACTIVE", "IN_PROGRESS", "IN_FLIGHT", "EXECUTING"].includes(
+                                    status
+                                )
+                                    ? "status-active"
+                                    : ["IDLE", "AVAILABLE", "READY"].includes(status)
+                                        ? "status-idle"
+                                        : "status-other"
+                            }`}
+                        >
+                          {status.replaceAll("_", " ")}
+                        </span>
+                        </td>
+
+                        <td>
+                          <div className="battery-cell">
+                            <div className="battery-track">
+                              <div
+                                  className={`battery-fill ${batteryClass(battery)}`}
+                                  style={{
+                                    width: `${Math.max(0, Math.min(100, battery))}%`,
+                                  }}
+                              />
+                            </div>
+                            <span className={batteryClass(battery)}>
+                            {battery}%
+                          </span>
+                          </div>
+                        </td>
+
+                        <td>
+                        <span className="gps-value">
+                          <i
+                              className={`gps-dot ${
+                                  String(drone.gpsStatus || "")
+                                      .toLowerCase()
+                                      .includes("connect")
+                                      ? ""
+                                      : "gps-off"
+                              }`}
+                          />
+                          {drone.gpsStatus || "Unknown"}
+                        </span>
+                        </td>
+
+                        <td className="coordinates">
+                          {position
+                              ? `${position[0].toFixed(4)}, ${position[1].toFixed(4)}`
+                              : "No coordinates"}
+                        </td>
+
+                        <td>
+                          <button
+                              className="locate-button"
+                              type="button"
+                              disabled={!position}
+                              onClick={() => {
+                                selectDrone(drone);
+                                document
+                                    .getElementById("map-panel")
+                                    ?.scrollIntoView({ behavior: "smooth" });
+                              }}
+                          >
+                            Locate ↗
+                          </button>
+                        </td>
+                      </tr>
+                  );
+                })}
+
+                {!loading && filteredDrones.length === 0 && (
+                    <tr>
+                      <td colSpan="6" className="empty-state">
+                        {error
+                            ? "Waiting for the backend connection."
+                            : "No drones match your search."}
+                      </td>
+                    </tr>
+                )}
+
+                {loading && (
+                    <tr>
+                      <td colSpan="6" className="empty-state">
+                        Loading fleet data…
+                      </td>
+                    </tr>
+                )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="table-footer">
+            <span>
+              Showing {filteredDrones.length} of {drones.length} registered drones
+            </span>
+              <span>
+              Last updated:{" "}
+                {lastUpdated
+                    ? lastUpdated.toLocaleTimeString()
+                    : "Waiting for data"}
+            </span>
+            </div>
+          </section>
+
+          <footer className="dashboard-footer">
+            <span>AEROSAGA · AUTONOMOUS MISSION CONTROL</span>
+            <span>Monitoring interface · Development build</span>
+          </footer>
+        </main>
+      </div>
   );
 }
 
+export default App;

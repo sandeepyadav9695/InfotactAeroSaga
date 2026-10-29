@@ -14,7 +14,6 @@ public class AerosagaProjectApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(AerosagaProjectApplication.class, args);
 
-		System.out.println("hello Aerosaga");
 	}
 
 }

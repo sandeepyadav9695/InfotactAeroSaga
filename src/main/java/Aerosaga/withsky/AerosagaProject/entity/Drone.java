@@ -4,9 +4,10 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 
 @Entity
-@Table(name="Drones")
+@Table(name = "Drones")
 public class Drone {
 
     @Id
@@ -27,6 +28,22 @@ public class Drone {
 
     @Column(nullable = false)
     private String gpsStatus = "CONNECTED";
+
+    // GPS coordinates
+    @NotNull
+    @Min(-90)
+    @Max(90)
+    @Column(nullable = false)
+    private Double latitude = 25.7465;
+
+    @NotNull
+    @Min(-180)
+    @Max(180)
+    @Column(nullable = false)
+    private Double longitude = 82.6837;
+
+    public Drone() {
+    }
 
     public Long getId() {
         return id;
@@ -66,5 +83,21 @@ public class Drone {
 
     public void setGpsStatus(String gpsStatus) {
         this.gpsStatus = gpsStatus;
+    }
+
+    public Double getLatitude() {
+        return latitude;
+    }
+
+    public void setLatitude(Double latitude) {
+        this.latitude = latitude;
+    }
+
+    public Double getLongitude() {
+        return longitude;
+    }
+
+    public void setLongitude(Double longitude) {
+        this.longitude = longitude;
     }
 }
