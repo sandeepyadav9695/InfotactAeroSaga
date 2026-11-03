@@ -967,4 +967,189 @@ tbody tr:last-child td {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
   }
+  /* Fleet Actions */
+  .fleet-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .add-drone-button {
+    background: #19c9b0;
+    color: #071b20;
+    border: none;
+    border-radius: 9px;
+    padding: 12px 18px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: 0.2s ease;
+    white-space: nowrap;
+  }
+
+  .add-drone-button:hover {
+    background: #37e5cd;
+    transform: translateY(-2px);
+  }
+
+  /* Modal Overlay */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(2, 10, 20, 0.78);
+    backdrop-filter: blur(7px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  /* Modal */
+  .drone-modal {
+    width: 100%;
+    max-width: 480px;
+    background: #111e30;
+    border: 1px solid #263b53;
+    border-radius: 16px;
+    padding: 28px;
+    box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5);
+    animation: modalAppear 0.2s ease;
+  }
+
+  @keyframes modalAppear {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 25px;
+  }
+
+  .modal-header h2 {
+    color: #f0f6ff;
+    font-size: 22px;
+    margin: 8px 0;
+  }
+
+  .modal-header p {
+    color: #91a3b9;
+    font-size: 13px;
+  }
+
+  .modal-close {
+    background: #1d2d42;
+    color: #fff;
+    border: none;
+    border-radius: 7px;
+    width: 32px;
+    height: 32px;
+    font-size: 23px;
+    cursor: pointer;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    margin-bottom: 18px;
+  }
+
+  .form-group label {
+    color: #cbd8e8;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .form-group input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 13px 14px;
+    background: #0b1727;
+    color: #fff;
+    border: 1px solid #30445e;
+    border-radius: 8px;
+    outline: none;
+    font-size: 14px;
+  }
+
+  .form-group input:focus {
+    border-color: #19c9b0;
+    box-shadow: 0 0 0 3px rgba(25, 201, 176, 0.1);
+  }
+
+  .form-error {
+    padding: 11px;
+    background: rgba(251, 83, 100, 0.12);
+    color: #ff7885;
+    border: 1px solid rgba(251, 83, 100, 0.3);
+    border-radius: 7px;
+    font-size: 13px;
+    margin-bottom: 15px;
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 25px;
+  }
+
+  .cancel-button,
+  .submit-drone-button {
+    padding: 12px 17px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .cancel-button {
+    background: #26364b;
+    color: #dce7f5;
+    border: 1px solid #3a4c64;
+  }
+
+  .submit-drone-button {
+    background: #19c9b0;
+    color: #071b20;
+    border: none;
+  }
+
+  .submit-drone-button:hover {
+    background: #37e5cd;
+  }
+
+  .submit-drone-button:disabled,
+  .cancel-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  /* Responsive */
+  @media (max-width: 700px) {
+    .fleet-actions {
+      width: 100%;
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .add-drone-button {
+      width: 100%;
+    }
+
+    .drone-modal {
+      padding: 20px;
+    }
+  }
 }

@@ -90,12 +90,13 @@
 	<build>
 		<plugins>
 
-			<!-- Maven Compiler -->
+			<!-- Maven Compiler Plugin -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
+				<version>3.14.1</version>
 				<configuration>
-					<release>${maven.compiler.release}</release>
+					<release>17</release>
 				</configuration>
 			</plugin>
 
@@ -103,6 +104,7 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+				<version>4.1.1</version>
 			</plugin>
 
 		</plugins>

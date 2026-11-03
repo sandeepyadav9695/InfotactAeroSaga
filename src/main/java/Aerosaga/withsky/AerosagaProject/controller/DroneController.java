@@ -5,6 +5,8 @@ import Aerosaga.withsky.AerosagaProject.service.DroneService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
+import org.springframework.http.ResponseEntity;
+
 import java.util.List;
 
 @RestController
@@ -16,7 +18,13 @@ public class DroneController {
     public DroneController(DroneService droneService) {
         this.droneService = droneService;
     }
+    @PatchMapping("/{id}/activate")
+    public ResponseEntity<Drone> activateDrone(@PathVariable Long id) {
 
+        Drone drone = droneService.activateDrone(id);
+
+        return ResponseEntity.ok(drone);
+    }
     @PostMapping
     public Drone register(@Valid @RequestBody Drone drone) {
         return droneService.register(drone);

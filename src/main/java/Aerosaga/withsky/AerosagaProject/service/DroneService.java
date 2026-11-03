@@ -35,6 +35,15 @@ public class DroneService {
                 HttpStatus.NOT_FOUND, "Drone not found : "+id
         ));
     }
+    public Drone activateDrone(Long id) {
+        Drone drone = droneRepository.findById(id)
+                .orElseThrow(() ->
+                        new RuntimeException("Drone not found"));
+
+        drone.setStatus("ACTIVE");
+
+        return droneRepository.save(drone);
+    }
     public Drone updateBattery(Long id, double batteryLevel){
         if(batteryLevel<10|| batteryLevel>100){
             throw new ResponseStatusException(

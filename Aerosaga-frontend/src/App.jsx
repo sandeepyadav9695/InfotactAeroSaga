@@ -9,12 +9,23 @@ import {
 import "leaflet/dist/leaflet.css";
 import "./index.css";
 
-const API_URL = "http://localhost:8081/api/drones";
+// Vite proxy should forward /api to http://localhost:8081
+const API_URL = "/api/drones";
 
 const INDIA_CENTER = [22.9734, 78.6569];
 
 function normalizeStatus(status) {
   return String(status || "UNKNOWN").toUpperCase();
+}
+
+function isActiveStatus(status) {
+  return ["ACTIVE", "IN_PROGRESS", "IN_FLIGHT", "EXECUTING"].includes(
+      normalizeStatus(status)
+  );
+}
+
+function isIdleStatus(status) {
+  return ["IDLE", "AVAILABLE", "READY"].includes(normalizeStatus(status));
 }
 
 function batteryClass(value) {
@@ -54,9 +65,9 @@ function FlyToDrone({ position }) {
   return null;
 }
 
-function MetricCard({ label, value, detail, icon, accent }) {
+function MetricCard({ label, value, detail, icon, accent = "" }) {
   return (
-      <article className={`metric-card ${accent || ""}`}>
+      <article className={`metric-card ${accent}`}>
         <div className="metric-top">
           <span>{label}</span>
           <span className="metric-icon">{icon}</span>
@@ -71,9 +82,11 @@ function App() {
   const [drones, setDrones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [lastUpdated, setLastUpdated] = useState(null);
   const [selectedDrone, setSelectedDrone] = useState(null);
   const [search, setSearch] = useState("");
+  const [activatingId, setActivatingId] = useState(null);
 
   const fetchDrones = useCallback(async () => {
     try {
@@ -108,18 +121,40 @@ function App() {
     return () => window.clearInterval(timer);
   }, [fetchDrones]);
 
+  const activateDrone = useCallback(
+      async (droneId) => {
+        setActivatingId(droneId);
+        setActionError("");
+
+        try {
+          const response = await fetch(
+              `${API_URL}/${encodeURIComponent(droneId)}/activate`,
+              { method: "PATCH" }
+          );
+
+          if (!response.ok) {
+            const message = await response.text();
+            throw new Error(
+                message || `Activation failed (HTTP ${response.status})`
+            );
+          }
+
+          await fetchDrones();
+        } catch (err) {
+          setActionError(err.message || "Unable to activate this drone.");
+        } finally {
+          setActivatingId(null);
+        }
+      },
+      [fetchDrones]
+  );
+
   const stats = useMemo(() => {
     const active = drones.filter((drone) =>
-        ["ACTIVE", "IN_PROGRESS", "IN_FLIGHT", "EXECUTING"].includes(
-            normalizeStatus(drone.status)
-        )
+        isActiveStatus(drone.status)
     ).length;
 
-    const idle = drones.filter((drone) =>
-        ["IDLE", "AVAILABLE", "READY"].includes(
-            normalizeStatus(drone.status)
-        )
-    ).length;
+    const idle = drones.filter((drone) => isIdleStatus(drone.status)).length;
 
     const lowBattery = drones.filter(
         (drone) => Number(drone.batteryLevel ?? 0) <= 20
@@ -243,6 +278,16 @@ function App() {
               </div>
           )}
 
+          {actionError && (
+              <div className="error-banner" role="alert">
+                <strong>Drone action failed</strong>
+                <span>{actionError}</span>
+                <button type="button" onClick={() => setActionError("")}>
+                  Dismiss
+                </button>
+              </div>
+          )}
+
           <section className="metrics-grid" aria-label="Fleet summary">
             <MetricCard
                 label="Total Fleet"
@@ -307,9 +352,7 @@ function App() {
                   const color =
                       battery <= 20
                           ? "#fb5364"
-                          : ["ACTIVE", "IN_PROGRESS", "IN_FLIGHT", "EXECUTING"].includes(
-                              status
-                          )
+                          : isActiveStatus(status)
                               ? "#2ce4c6"
                               : "#63a5ff";
 
@@ -344,9 +387,15 @@ function App() {
 
               <div className="map-legend">
                 <strong>MAP LEGEND</strong>
-                <span><i className="legend-dot green" /> Active</span>
-                <span><i className="legend-dot blue" /> Standby / Other</span>
-                <span><i className="legend-dot red" /> Low battery</span>
+                <span>
+                <i className="legend-dot green" /> Active
+              </span>
+                <span>
+                <i className="legend-dot blue" /> Standby / Other
+              </span>
+                <span>
+                <i className="legend-dot red" /> Low battery
+              </span>
               </div>
 
               <div className="map-counter">
@@ -404,6 +453,8 @@ function App() {
                   const battery = Number(drone.batteryLevel ?? 0);
                   const position = droneCoordinates(drone);
                   const status = normalizeStatus(drone.status);
+                  const active = isActiveStatus(status);
+                  const busy = activatingId === drone.id;
 
                   return (
                       <tr key={drone.id}>
@@ -420,11 +471,9 @@ function App() {
                         <td>
                         <span
                             className={`status-badge ${
-                                ["ACTIVE", "IN_PROGRESS", "IN_FLIGHT", "EXECUTING"].includes(
-                                    status
-                                )
+                                active
                                     ? "status-active"
-                                    : ["IDLE", "AVAILABLE", "READY"].includes(status)
+                                    : isIdleStatus(status)
                                         ? "status-idle"
                                         : "status-other"
                             }`}
@@ -439,7 +488,10 @@ function App() {
                               <div
                                   className={`battery-fill ${batteryClass(battery)}`}
                                   style={{
-                                    width: `${Math.max(0, Math.min(100, battery))}%`,
+                                    width: `${Math.max(
+                                        0,
+                                        Math.min(100, battery)
+                                    )}%`,
                                   }}
                               />
                             </div>
@@ -471,19 +523,34 @@ function App() {
                         </td>
 
                         <td>
-                          <button
-                              className="locate-button"
-                              type="button"
-                              disabled={!position}
-                              onClick={() => {
-                                selectDrone(drone);
-                                document
-                                    .getElementById("map-panel")
-                                    ?.scrollIntoView({ behavior: "smooth" });
-                              }}
-                          >
-                            Locate ↗
-                          </button>
+                          <div className="drone-actions">
+                            <button
+                                className="locate-button"
+                                type="button"
+                                disabled={!position}
+                                onClick={() => {
+                                  selectDrone(drone);
+                                  document
+                                      .getElementById("map-panel")
+                                      ?.scrollIntoView({ behavior: "smooth" });
+                                }}
+                            >
+                              Locate ↗
+                            </button>
+
+                            <button
+                                className="activate-button"
+                                type="button"
+                                onClick={() => activateDrone(drone.id)}
+                                disabled={active || busy}
+                            >
+                              {busy
+                                  ? "Activating..."
+                                  : active
+                                      ? "Drone Active"
+                                      : "Activate Drone"}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                   );
@@ -512,13 +579,12 @@ function App() {
 
             <div className="table-footer">
             <span>
-              Showing {filteredDrones.length} of {drones.length} registered drones
+              Showing {filteredDrones.length} of {drones.length} registered
+              drones
             </span>
               <span>
               Last updated:{" "}
-                {lastUpdated
-                    ? lastUpdated.toLocaleTimeString()
-                    : "Waiting for data"}
+                {lastUpdated ? lastUpdated.toLocaleTimeString() : "Waiting for data"}
             </span>
             </div>
           </section>
