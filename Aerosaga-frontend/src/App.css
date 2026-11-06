@@ -900,15 +900,15 @@ button:disabled {
   }
 
   /* =========================================
-    ACTIVATE BUTTON
- ========================================= */
+   DEACTIVATE BUTTON
+========================================= */
 
-  .activate-button {
+  .deactivate-button {
     width: 100%;
-    padding: 15px 14px;
+    padding: 10px 14px;
     margin-top: 12px;
-    background: #16a34a;
-    color: blue;
+    background: #dc2626;
+    color: #ffffff;
     border: none;
     border-radius: 8px;
     font-size: 13px;
@@ -917,9 +917,15 @@ button:disabled {
     transition: background 0.2s ease, transform 0.2s ease;
   }
 
-  .activate-button:hover {
-    background: #15803d;
+  .deactivate-button:hover {
+    background: #b91c1c;
     transform: translateY(-1px);
+  }
+
+  .deactivate-button:disabled {
+    background: #94a3b8;
+    cursor: not-allowed;
+    transform: none;
   }
 
   .activate-button:active {
