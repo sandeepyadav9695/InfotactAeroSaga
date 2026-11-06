@@ -899,12 +899,36 @@ button:disabled {
     cursor: pointer;
   }
 
+  /* =========================================
+    ACTIVATE BUTTON
+ ========================================= */
+
+  .activate-button {
+    width: 100%;
+    padding: 15px 14px;
+    margin-top: 12px;
+    background: #16a34a;
+    color: blue;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+
   .activate-button:hover {
     background: #15803d;
+    transform: translateY(-1px);
+  }
+
+  .activate-button:active {
+    transform: scale(0.98);
   }
 
   .activate-button:disabled {
     background: #94a3b8;
     cursor: not-allowed;
+    transform: none;
   }
 }
