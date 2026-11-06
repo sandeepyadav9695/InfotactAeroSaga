@@ -209,7 +209,7 @@ services:
   temporal:
     image: temporalio/temporal:latest
     container_name: aerosaga-temporal
-    command: server start-dev --ip 0.0.0.0 --ui-port 8080
+    command: server start-dev --ip 0.0.0.0 --ui-port 8081
     ports:
       - "7233:7233"
       - "8080:8080"
